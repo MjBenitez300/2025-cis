@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>View Patient Records</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; text-align: center; background: #f9f9f9; }
+    h1 { margin-bottom: 20px; color: #333; }
+    #navButtons, #actionButtons { margin-bottom: 20px; }
+    #navButtons button, #actionButtons button {
+      margin: 5px; padding: 10px 18px; font-size: 16px; border: none;
+      border-radius: 5px; cursor: pointer; color: white; transition: background-color 0.3s;
+    }
+    #navButtons button { background-color: #007bff; }
+    #navButtons button:hover { background-color: #0056b3; }
+    #actionButtons button { background-color: #28a745; }
+    #actionButtons button:hover { background-color: #1e7e34; }
+    #deleteAllBtn { background-color: #dc3545; }
+    #deleteAllBtn:hover { background-color: #a71d2a; }
+    #viewHistoryBtn { background-color: #0069d9; }
+    #viewHistoryBtn:hover { background-color: #004a9f; }
+
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; box-shadow: 0 0 8px rgba(0,0,0,0.1); }
+    th, td { padding: 12px 15px; border: 1px solid #ddd; text-align: left; }
+    th { background-color: #007bff; color: white; user-select: none; }
+
+    #historyModal {
+      display: none; position: fixed; top: 0; left: 0;
+      width: 100%; height: 100%; background-color: rgba(0,0,0,0.6);
+      z-index: 10000; align-items: center; justify-content: center;
+      overflow: auto; padding: 40px 0;
+    }
+    #historyModalContent {
+      background: white; padding: 30px 40px; border-radius: 8px;
+      width: 700px; max-height: 80vh; overflow-y: auto;
+      text-align: left; box-shadow: 0 0 15px rgba(0,0,0,0.25);
+    }
+    #historyModalContent h2 { margin-top: 0; text-align: center; }
+    #closeModalBtn {
+      display: block; margin: 20px auto 0; padding: 10px 25px;
+      background-color: #007bff; color: white;
+      border: none; border-radius: 5px; cursor: pointer;
+    }
+    #closeModalBtn:hover { background-color: #0056b3; }
+  </style>
+</head>
+<body>
+
+  <h1>View Patient Records</h1>
+
+  <div id="navButtons">
+    <button id="viewAllBtn">View All Records</button>
+    <button id="viewGuestBtn">View Guest Records</button>
+    <button id="viewEmployeeBtn">View Employee Records</button>
+  </div>
+
+  <div id="actionButtons">
+    <button id="printBtn">Print</button>
+    <button id="exportBtn">Export to Excel</button>
+    <button id="deleteAllBtn">Delete All Displayed Records</button>
+    <button id="backBtn">Back to Dashboard</button>
+    <button id="viewHistoryBtn">View History</button>
+  </div>
+
+  <table id="recordsTable"></table>
+
+  <div id="historyModal">
+    <div id="historyModalContent">
+      <h2 id="historyTitle">Full History</h2>
+      <div id="historyContent"></div>
+      <button id="closeModalBtn">Close</button>
+    </div>
+  </div>
+
+  <script>
+    const loggedInUser = JSON.parse(localStorage.getItem("loggedInUser"));
+    if (!loggedInUser) {
+      alert("Please login first.");
+      window.location.href = "index.html";
+    }
+
+    const recordsTable = document.getElementById("recordsTable");
+    const viewAllBtn = document.getElementById("viewAllBtn");
+    const viewGuestBtn = document.getElementById("viewGuestBtn");
+    const viewEmployeeBtn = document.getElementById("viewEmployeeBtn");
+    const viewHistoryBtn = document.getElementById("viewHistoryBtn");
+    const printBtn = document.getElementById("printBtn");
+    const exportBtn = document.getElementById("exportBtn");
+    const deleteAllBtn = document.getElementById("deleteAllBtn");
+    const backBtn = document.getElementById("backBtn");
+
+    const historyModal = document.getElementById("historyModal");
+    const historyTitle = document.getElementById("historyTitle");
+    const historyContent = document.getElementById("historyContent");
+    const closeModalBtn = document.getElementById("closeModalBtn");
+
+    const employeeExtraFields = [
+      { id: "civilStatus", label: "Civil Status" },
+      { id: "department", label: "Department" }
+    ];
+    const commonFields = [
+      { id: "patientID", label: "Patient ID" },
+      { id: "patientName", label: "Patient Name" },
+      { id: "patientAge", label: "Age" },
+      { id: "sex", label: "Sex" },
+      { id: "patientAddress", label: "Address" },
+      { id: "walkInDate", label: "Walk-in Date" },
+      { id: "chiefComplaint", label: "Chief Complaint" },
+      { id: "history", label: "History of Past Illness" },
+      { id: "medication", label: "Medication" }
+    ];
+
+    let currentFilter = null;
+
+    function renderTableHeader() {
+      recordsTable.innerHTML = "";
+      const header = recordsTable.createTHead().insertRow();
+      let fields = [...commonFields];
+      if (currentFilter !== "guest") fields = fields.concat(employeeExtraFields);
+      fields.forEach(f => {
+        const th = document.createElement("th");
+        th.textContent = f.label;
+        header.appendChild(th);
+      });
+    }
+
+    function loadPatients() {
+      const all = JSON.parse(localStorage.getItem("patients")) || [];
+      if (currentFilter === "guest" || currentFilter === "employee") {
+        return all.filter(p => p.type === currentFilter);
+      }
+      return all;
+    }
+
+    function renderRecords() {
+      renderTableHeader();
+      const tbody = recordsTable.createTBody();
+      const patients = loadPatients();
+
+      let fields = [...commonFields];
+      if (currentFilter !== "guest") fields = fields.concat(employeeExtraFields);
+
+      patients.forEach(p => {
+        const row = tbody.insertRow();
+        fields.forEach(f => {
+          const cell = row.insertCell();
+          cell.textContent = f.id === "sex"
+            ? (p[f.id] === "M" ? "Male" : p[f.id] === "F" ? "Female" : "")
+            : (p[f.id] || "");
+        });
+        row.insertCell().textContent = p.timestamp || "";
+        row.insertCell().textContent = p.savedBy || "";
+      });
+    }
+
+    function openHistoryModal(records, patientName) {
+      historyTitle.textContent = `Full History for ${patientName}`;
+      let html = `<table style="width: 100%; border-collapse: collapse;">`;
+      html += `<thead><tr>
+        <th>Date</th><th>Chief Complaint</th><th>Past Illness</th><th>Medication</th><th>Saved By</th>
+      </tr></thead><tbody>`;
+      records.forEach(rec => {
+        html += `<tr>
+          <td>${rec.walkInDate || ""}</td>
+          <td>${rec.chiefComplaint || ""}</td>
+          <td>${rec.history || ""}</td>
+          <td>${rec.medication || ""}</td>
+          <td>${rec.savedBy || ""}</td>
+        </tr>`;
+      });
+      html += "</tbody></table>";
+      historyContent.innerHTML = html;
+
+      // Add print button below the table
+      if (!document.getElementById("printHistoryBtn")) {
+        const printBtn = document.createElement("button");
+        printBtn.id = "printHistoryBtn";
+        printBtn.textContent = "Print History";
+        printBtn.style.marginTop = "20px";
+        printBtn.style.display = "block";
+        printBtn.style.marginLeft = "auto";
+        printBtn.style.marginRight = "auto";
+        printBtn.style.padding = "10px 20px";
+        printBtn.style.backgroundColor = "#007bff";
+        printBtn.style.color = "white";
+        printBtn.style.border = "none";
+        printBtn.style.borderRadius = "5px";
+        printBtn.style.cursor = "pointer";
+
+        printBtn.onclick = () => {
+          const newWin = window.open("", "", "width=900,height=600");
+          newWin.document.write(`<html><head><title>Print History</title><style>table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background:#007bff;color:#fff;}</style></head><body>`);
+          newWin.document.write(historyContent.innerHTML);
+          newWin.document.write(`</body></html>`);
+          newWin.document.close();
+          newWin.print();
+        };
+
+        historyContent.appendChild(printBtn);
+      }
+
+      historyModal.style.display = "flex";
+    }
+
+    // 🔍 View History by Patient Name
+    viewHistoryBtn.onclick = () => {
+      const name = prompt("Enter Patient Name:");
+      if (!name) return;
+      const allPatients = JSON.parse(localStorage.getItem("patients")) || [];
+      const records = allPatients.filter(p =>
+        p.patientName && p.patientName.toLowerCase() === name.toLowerCase()
+      );
+      if (records.length === 0) {
+        alert("No records found for: " + name);
+        return;
+      }
+      openHistoryModal(records, name);
+    };
+
+    closeModalBtn.onclick = () => {
+      historyModal.style.display = "none";
+    };
+
+    printBtn.onclick = () => {
+      if (recordsTable.rows.length === 0) return alert("No records to print.");
+      const newWin = window.open("", "", "width=900,height=600");
+      newWin.document.write(`<html><head><title>Print</title><style>table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background:#007bff;color:#fff;}</style></head><body>`);
+      newWin.document.write(recordsTable.outerHTML);
+      newWin.document.write(`</body></html>`);
+      newWin.document.close();
+      newWin.print();
+    };
+
+    exportBtn.onclick = () => {
+      if (recordsTable.rows.length === 0) return alert("No records to export.");
+      const rows = [...recordsTable.rows].map(r => [...r.cells].map(c => `"${c.textContent}"`).join(","));
+      const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "patient_records.csv"; a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    deleteAllBtn.onclick = () => {
+      if (!confirm("Delete all displayed records?")) return;
+      const all = JSON.parse(localStorage.getItem("patients")) || [];
+      const kept = currentFilter ? all.filter(p => p.type !== currentFilter) : [];
+      localStorage.setItem("patients", JSON.stringify(kept));
+      renderRecords();
+    };
+
+    backBtn.onclick = () => window.location.href = "dashboard.html";
+    viewAllBtn.onclick = () => { currentFilter = null; renderRecords(); };
+    viewGuestBtn.onclick = () => { currentFilter = "guest"; renderRecords(); };
+    viewEmployeeBtn.onclick = () => { currentFilter = "employee"; renderRecords(); };
+
+    // Initial render
+    renderRecords();
+  </script>
+
+</body>
+</html>
